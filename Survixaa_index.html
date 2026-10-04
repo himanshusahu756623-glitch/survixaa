@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Survixaa v6</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+:root{--bg:#eef3f1;--card:#fff;--ink:#16302b;--mut:#5f7a73;--pri:#0f6b5c;--acc:#e07b2a;--line:#d3e0dc;--err:#b3382c;--ok:#2f8f5b;--warn:#b96b17}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:Arial,"Noto Sans Devanagari",sans-serif}
+button,input,textarea,select{font:inherit}
+#app{min-height:100vh;max-width:720px;margin:auto;display:flex;flex-direction:column}
+header{padding:14px 16px;display:flex;align-items:center;gap:10px;background:var(--pri);color:#fff;position:sticky;top:0;z-index:5}
+header h1{font-size:18px;margin:0;flex:1}header button{background:none;border:0;color:#fff;font-size:22px}
+main{flex:1;padding:14px;padding-bottom:85px}
+nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(720px,100%);display:flex;background:#fff;border-top:1px solid var(--line);z-index:6}
+nav button{flex:1;padding:8px 2px;background:none;border:0;color:var(--mut);font-size:10px}
+nav button b{display:block;font-size:18px;font-weight:400;margin-bottom:2px}nav button.on{color:var(--pri);font-weight:bold}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px;margin-bottom:12px}
+h2{font-size:21px;margin:0 0 7px}h3{font-size:16px;margin:12px 0 8px}
+.mut{color:var(--mut);font-size:13px}.small{font-size:12px}
+input,textarea,select{width:100%;padding:11px;margin:5px 0 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+input:focus,textarea:focus,select:focus,button:focus-visible{outline:2px solid var(--acc)}
+.btn{width:100%;padding:12px;border:0;border-radius:9px;background:var(--pri);color:#fff;font-weight:bold;margin-top:5px;cursor:pointer}
+.btn.alt{background:#fff;color:var(--pri);border:1.5px solid var(--pri)}.btn.warn{background:var(--warn)}.btn.danger{background:var(--err)}
+.btn.sm{width:auto;padding:7px 10px;font-size:12px;margin:0}
+.btn[disabled]{opacity:.55}
+.row{display:flex;align-items:center;gap:8px}.grow{flex:1}.wrap{flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{font-size:25px;font-weight:800;color:var(--pri)}
+.tag{display:inline-block;font-size:10px;padding:4px 8px;border-radius:12px;background:var(--line)}
+.tag.ok{background:var(--ok);color:#fff}.tag.warn{background:#f1d19f}
+.err{color:var(--err);font-size:13px;min-height:18px}.ok{color:var(--ok)}
+.notice{background:#fff7e8;border:1px solid #e6c37a;padding:10px;border-radius:9px;font-size:12px;margin-bottom:10px}
+.question{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;background:#fbfdfc}
+.tablewrap{overflow:auto}.tbl{width:100%;border-collapse:collapse;font-size:12px}.tbl th,.tbl td{border:1px solid var(--line);padding:7px;text-align:left;white-space:nowrap}
+.search{margin-bottom:10px}
+#toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:.2s;z-index:20;pointer-events:none}
+#toast.show{opacity:1}.ld{text-align:center;padding:80px 20px;color:var(--mut)}
+.empty{text-align:center;padding:25px;color:var(--mut)}
+.login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px}
+.loginbox{width:100%;max-width:430px}
+@media print{
+ nav,header,.no-print,.btn{display:none!important}
+ main{padding:0!important}
+ .card{border:0}
+ .print-area{display:block!important}
+ body{background:#fff}
+}
+</style>
+</head>
+<body>
+<div id="app"><div class="ld">लोड हो रहा है…</div></div>
+
+<script>
+/* =========================
+   FIREBASE
+========================= */
+const firebaseConfig={
+ apiKey:"AIzaSyAqxzekS9A9GoK13HARJ1CCPeLB_mjb5qY",
+ authDomain:"survixaa.firebaseapp.com",
+ projectId:"survixaa",
+ storageBucket:"survixaa.firebasestorage.app",
+ messagingSenderId:"78615033452",
+ appId:"1:78615033452:web:45567195cdc67ccd9f8a49"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth();
+const db=firebase.firestore();
+const FV=firebase.firestore.FieldValue;
+
+/* Secondary auth is used so Super Admin stays logged in while creating a user. */
+const adminApp=firebase.initializeApp(firebaseConfig,"survixaaAdminCreator");
+const adminAuth=adminApp.auth();
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
+
+const ROLE={super:"Super Admin",admin:"Field Admin",surveyor:"Surveyor"};
+
+const NAV={
+ super:[["dashboard","📊","Dashboard"],["users","👥","Users"],["fields","🌐","Fields"],["surveys","📋","Surveys"],["profile","👤","Profile"]],
+ admin:[["dashboard","📊","Dashboard"],["team","👥","Team"],["surveys","📋","Surveys"],["profile","👤","Profile"]],
+ surveyor:[["dashboard","📊","Home"],["surveys","📋","Surveys"],["profile","👤","Profile"]]
+};
+
+let S={
+ user:null,profile:null,tab:"dashboard",view:null,arg:null,
+ mode:"login",ed:null,
+ fields:[],surveys:[],users:[],teams:[],responses:[],
+ currentRows:[],draftRows:[]
+};
+let unsubs=[];
+
+function toast(t){
+ const e=$("#toast"); if(!e)return;
+ e.textContent=t;e.classList.add("show");
+ setTimeout(()=>e.classList.remove("show"),1800);
+}
+function loading(){app.innerHTML='<div class="ld">कृपया प्रतीक्षा करें…</div>'}
+function opts(q){return(q.options||"").split(",").map(x=>x.trim()).filter(Boolean)}
+function roleLabel(r){return ROLE[r]||r||""}
+function now(){return new Date().toISOString()}
+
+function shell(title,body,back){
+ const n=NAV[S.profile?.role]||[];
+ app.innerHTML=`<header>${back?'<button id="bk">←</button>':""}<h1>${esc(title)}</h1>
+ <span class="tag">${esc(roleLabel(S.profile?.role))}${S.profile?.field?" · "+esc(S.profile.field):""}</span></header>
+ <main>${body}</main>
+ <nav>${n.map(([k,i,l])=>`<button data-t="${k}" class="${S.tab===k&&!back?"on":""}"><b>${i}</b>${l}</button>`).join("")}</nav>
+ <div id="toast"></div>`;
+ app.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{S.tab=b.dataset.t;S.view=null;render()});
+ if(back&&$("#bk"))$("#bk").onclick=back;
+}
+function home(){S.view=null;S.ed=null;render()}
+
+function render(){
+ if(!S.user)return authView();
+ if(S.view==="surveyEdit")return surveyEditView();
+ if(S.view==="collect")return collectView();
+ if(S.view==="responses")return responsesView();
+ if(S.view==="userEdit")return userEditView();
+ if(S.view==="fieldEdit")return fieldEditView();
+ if(S.view==="teamEdit")return teamEditView();
+ if(S.view==="report")return reportView();
+
+ const pages={
+  dashboard:dashboardView,users:usersView,fields:fieldsView,
+  surveys:surveysView,team:teamView,profile:profileView
+ };
+ (pages[S.tab]||dashboardView)();
+}
+
+/* =========================
+   AUTH
+========================= */
+auth.onAuthStateChanged(async u=>{
+ unsubs.forEach(f=>f());unsubs=[];
+ if(!u){
+  S.user=null;S.profile=null;S.view=null;S.tab="dashboard";
+  authView();return;
+ }
+ loading();
+ try{
+  const snap=await db.collection("users").doc(u.uid).get();
+  if(!snap.exists){
+   await auth.signOut();
+   alert("इस Firebase account का Survixaa user profile नहीं मिला।");
+   return;
+  }
+  const p=snap.data();
+  if(p.status==="disabled"){
+   await auth.signOut();
+   alert("यह account disabled है। Super Admin से संपर्क करें।");
+   return;
+  }
+  S.user=u;
+  S.profile={id:u.uid,...p};
+  watchCommon();
+  render();
+ }catch(e){
+  app.innerHTML=`<div class="ld"><b>डेटा लोड नहीं हो सका</b><p>${esc(e.message)}</p><button class="btn" onclick="location.reload()">Retry</button></div>`;
+ }
+});
+
+function authView(){
+ const c=S.mode==="create";
+ app.innerHTML=`<div class="login"><div class="loginbox">
+ <div style="text-align:center;margin-bottom:18px"><div style="font-size:48px">📊</div>
+ <h2 style="font-size:30px;color:var(--pri)">Survixaa</h2>
+ <div class="mut">Field Survey Platform v6</div></div>
+ <div class="card">
+ ${c?'<label>नाम<input id="nm" autocomplete="name"></label>':""}
+ <label>Email<input id="em" type="email" autocomplete="email"></label>
+ <label>Password<input id="pw" type="password" autocomplete="${c?"new-password":"current-password"}" placeholder="कम से कम 6 अक्षर"></label>
+ <div class="err" id="er"></div>
+ <button class="btn" id="go">${c?"Create Surveyor Account":"Login"}</button>
+ ${!c?'<button class="btn alt" id="forgot">Password भूल गए? Reset करें</button>':""}
+ <button class="btn alt" id="sw">${c?"Login पर जाएँ":"नया Surveyor अकाउंट बनाएँ"}</button>
+ </div>
+ <div class="notice">Self-signup से बनने वाला account केवल <b>Surveyor</b> होगा। Admin और Super Admin account management से बनाए जाएँगे।</div>
+ </div></div>`;
+
+ $("#sw").onclick=()=>{S.mode=c?"login":"create";authView()};
+
+ if(!c)$("#forgot").onclick=async()=>{
+  const em=$("#em").value.trim().toLowerCase(),er=$("#er");
+  if(!/^\S+@\S+\.\S+$/.test(em))return er.textContent="पहले सही email डालें।";
+  try{
+   await auth.sendPasswordResetEmail(em);
+   er.innerHTML='<span class="ok">Reset link भेज दिया गया है। Inbox/Spam भी देखें।</span>';
+  }catch(e){er.textContent=firebaseError(e)}
+ };
+
+ $("#go").onclick=async()=>{
+  const em=$("#em").value.trim().toLowerCase(),pw=$("#pw").value,er=$("#er"),btn=$("#go");
+  if(!/^\S+@\S+\.\S+$/.test(em))return er.textContent="सही email डालें।";
+  if(pw.length<6)return er.textContent="Password कम से कम 6 अक्षर का होना चाहिए।";
+  btn.disabled=true;er.textContent="";
+  try{
+   if(c){
+    const nm=$("#nm").value.trim();
+    if(!nm)throw Error("नाम लिखें।");
+    const cred=await auth.createUserWithEmailAndPassword(em,pw);
+    await db.collection("users").doc(cred.user.uid).set({
+     name:nm,email:em,role:"surveyor",field:null,teamId:null,status:"active",
+     createdAt:FV.serverTimestamp()
+    });
+   }else{
+    await auth.signInWithEmailAndPassword(em,pw);
+   }
+  }catch(e){btn.disabled=false;er.textContent=firebaseError(e)}
+ };
+}
+
+function firebaseError(e){
+ const c=e?.code||"";
+ const map={
+  "auth/invalid-email":"Email सही नहीं है।",
+  "auth/user-not-found":"इस email का account नहीं मिला।",
+  "auth/wrong-password":"Password गलत है।",
+  "auth/invalid-credential":"Email या Password गलत है।",
+  "auth/email-already-in-use":"यह email पहले से registered है।",
+  "auth/weak-password":"Password कमजोर है। कम से कम 6 अक्षर रखें।",
+  "auth/too-many-requests":"बहुत प्रयास हुए हैं। थोड़ी देर बाद फिर कोशिश करें।",
+  "auth/network-request-failed":"Internet connection जाँचें।"
+ };
+ return map[c]||e?.message||"कुछ गड़बड़ हुई।";
+}
+
+/* =========================
+   FIRESTORE WATCHERS
+========================= */
+function watchCommon(){
+ const role=S.profile.role,field=S.profile.field;
+
+ unsubs.push(db.collection("fields").onSnapshot(s=>{
+  S.fields=s.docs.map(d=>({id:d.id,...d.data()}));
+  if(S.user)render();
+ },()=>{}));
+
+ let sr=db.collection("surveys");
+ if(field && role!=="super")sr=sr.where("field","==",field);
+
+ unsubs.push(sr.onSnapshot(s=>{
+  S.surveys=s.docs.map(d=>({id:d.id,...d.data()}));
+  if(S.user)render();
+ },()=>{}));
+
+ if(role==="super"||role==="admin"){
+  unsubs.push(db.collection("users").onSnapshot(s=>{
+   S.users=s.docs.map(d=>({id:d.id,...d.data()}));
+   if(S.user)render();
+  },()=>{}));
+ }
+
+ if(role==="surveyor"){
+  unsubs.push(db.collection("responses").where("by","==",S.user.uid).onSnapshot(s=>{
+   S.responses=s.docs.map(d=>({id:d.id,...d.data()}));
+   if(S.user)render();
+  },()=>{}));
+ }
+
+ if(role==="admin"||role==="super"){
+  unsubs.push(db.collection("responses").onSnapshot(s=>{
+   S.responses=s.docs.map(d=>({id:d.id,...d.data()}));
+   if(S.user)render();
+  },()=>{}));
+ }
+}
+
+/* =========================
+   DASHBOARDS
+========================= */
+function dashboardView(){
+ if(S.profile.role==="super")return superDash();
+ if(S.profile.role==="admin")return adminDash();
+ return surveyorDash();
+}
+
+function superDash(){
+ const admins=S.users.filter(x=>x.role==="admin"&&x.status!=="deleted");
+ const surv=S.users.filter(x=>x.role==="surveyor"&&x.status!=="deleted");
+ shell("Super Admin Dashboard",`
+ <div class="grid">
+  <div class="card"><div class="mut">Fields</div><div class="stat">${S.fields.length}</div></div>
+  <div class="card"><div class="mut">Admins</div><div class="stat">${admins.length}</div></div>
+  <div class="card"><div class="mut">Surveyors</div><div class="stat">${surv.length}</div></div>
+  <div class="card"><div class="mut">Responses</div><div class="stat">${S.responses.length}</div></div>
+ </div>
+ <div class="card"><h3>मुख्य Management</h3>
+  <button class="btn" id="u">👥 Admin / Surveyor Management</button>
+  <button class="btn alt" id="f">🌐 Field Management</button>
+  <button class="btn alt" id="s">📋 All Surveys</button>
+  <button class="btn alt" id="r">📊 All Responses / Report</button>
+ </div>
+ `);
+ $("#u").onclick=()=>{S.tab="users";render()};
+ $("#f").onclick=()=>{S.tab="fields";render()};
+ $("#s").onclick=()=>{S.tab="surveys";render()};
+ $("#r").onclick=()=>{S.view="responses";render()};
+}
+
+function adminDash(){
+ const mine=S.surveys;
+ const members=S.users.filter(x=>x.role==="surveyor"&&x.field===S.profile.field&&x.status!=="deleted");
+ shell("Admin Dashboard",`
+ <div class="grid">
+  <div class="card"><div class="mut">मेरे Surveys</div><div class="stat">${mine.length}</div></div>
+  <div class="card"><div class="mut">Published</div><div class="stat">${mine.filter(x=>x.status==="pub").length}</div></div>
+  <div class="card"><div class="mut">Team Surveyors</div><div class="stat">${members.length}</div></div>
+  <div class="card"><div class="mut">Responses</div><div class="stat">${S.responses.filter(r=>r.field===S.profile.field).length}</div></div>
+ </div>
+ <div class="card"><h3>काम शुरू करें</h3>
+  <button class="btn" id="ns">+ नया Survey</button>
+  <button class="btn alt" id="tm">👥 Team Management</button>
+  <button class="btn alt" id="rr">📊 Responses / Print Report</button>
+ </div>
+ `);
+ $("#ns").onclick=newSurvey;
+ $("#tm").onclick=()=>{S.tab="team";render()};
+ $("#rr").onclick=()=>{S.view="responses";render()};
+}
+
+function surveyorDash(){
+ shell("Surveyor Home",`
+ <div class="grid">
+  <div class="card"><div class="mut">Assigned Surveys</div><div class="stat">${S.surveys.filter(x=>x.status==="pub").length}</div></div>
+  <div class="card"><div class="mut">मेरे Responses</div><div class="stat">${S.responses.length}</div></div>
+ </div>
+ <div class="card"><h3>आज का काम</h3>
+ <p class="mut">Assigned survey खोलें और घर/Respondent की जानकारी भरें।</p>
+ <button class="btn" id="sv">📋 My Surveys</button></div>
+ `);
+ $("#sv").onclick=()=>{S.tab="surveys";render()};
+}
+
+/* =========================
+   USERS
+========================= */
+function usersView(){
+ if(S.profile.role!=="super")return home();
+
+ const rows=S.users.filter(u=>u.role!=="super"&&u.status!=="deleted").map(u=>`
+ <div class="card">
+  <div class="row"><b class="grow">${esc(u.name||"Unnamed")}</b>
+   <span class="tag ${u.status==="disabled"?"warn":"ok"}">${u.status==="disabled"?"Disabled":"Active"}</span>
+  </div>
+  <div class="mut">${esc(u.email||"")}<br>${esc(roleLabel(u.role))} · ${esc(u.field||"No Field")} ${u.teamId?"· "+esc(u.teamId):""}</div>
+  <div class="row wrap" style="margin-top:9px">
+   <button class="btn sm alt" data-edit="${u.id}">Edit</button>
+   <button class="btn sm alt" data-reset="${esc(u.email)}">Password Reset</button>
+   <button class="btn sm ${u.status==="disabled"?"":"danger"}" data-status="${u.id}">${u.status==="disabled"?"Enable":"Disable"}</button>
+   <button class="btn sm danger" data-del="${u.id}">Delete</button>
+  </div>
+ </div>`).join("");
+
+ shell("User Management",`
+ <button class="btn" id="add">+ नया Admin / Surveyor</button>
+ <div style="height:10px"></div>${rows||'<div class="card empty">कोई user नहीं।</div>'}
+ `);
+
+ $("#add").onclick=()=>{S.ed={new:true,name:"",email:"",role:"surveyor",field:"",status:"active"};S.view="userEdit";render()};
+
+ app.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{
+  S.ed={...S.users.find(x=>x.id===b.dataset.edit),new:false};
+  S.view="userEdit";render();
+ });
+
+ app.querySelectorAll("[data-reset]").forEach(b=>b.onclick=async()=>{
+  try{await auth.sendPasswordResetEmail(b.dataset.reset);toast("Reset link भेज दिया गया")}
+  catch(e){toast(firebaseError(e))}
+ });
+
+ app.querySelectorAll("[data-status]").forEach(b=>b.onclick=async()=>{
+  const u=S.users.find(x=>x.id===b.dataset.status);if(!u)return;
+  await db.collection("users").doc(u.id).update({status:u.status==="disabled"?"active":"disabled"});
+  toast("Status बदल गया");
+ });
+
+ app.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
+  const u=S.users.find(x=>x.id===b.dataset.del);if(!u)return;
+  if(!confirm(`${u.name} का profile delete/disable करना है?`))return;
+  await db.collection("users").doc(u.id).update({status:"deleted",deletedAt:FV.serverTimestamp()});
+  toast("User profile deleted");
+ });
+}
+
+function userEditView(){
+ const d=S.ed;
+ shell(d.new?"Create User":"Edit User",`
+ <label>नाम<input id="nm" value="${esc(d.name)}"></label>
+ <label>Email<input id="em" type="email" value="${esc(d.email)}" ${d.new?"":"disabled"}></label>
+ <label>Role<select id="rl">
+  <option value="admin" ${d.role==="admin"?"selected":""}>Field Admin</option>
+  <option value="surveyor" ${d.role==="surveyor"?"selected":""}>Surveyor</option>
+ </select></label>
+ <label>Field<select id="fd"><option value="">— Select —</option>
+ ${S.fields.map(f=>`<option value="${esc(f.name)}" ${d.field===f.name?"selected":""}>${esc(f.name)}</option>`).join("")}</select></label>
+ ${d.new?'<label>Temporary Password<input id="pw" type="password" placeholder="कम से कम 6 अक्षर"></label>':""}
+ <div class="notice">Super Admin ही Admin/Surveyor का password reset email भेज सकता है। User का password इस page पर सीधे नहीं दिखाया जाता।</div>
+ <div class="err" id="er"></div><button class="btn" id="save">Save</button>
+ `,()=>{S.ed=null;home()});
+
+ $("#save").onclick=async()=>{
+  const name=$("#nm").value.trim(),em=$("#em").value.trim().toLowerCase(),role=$("#rl").value,field=$("#fd").value,er=$("#er");
+  if(!name||!em)return er.textContent="नाम और email जरूरी हैं।";
+  try{
+   if(d.new){
+    const pw=$("#pw").value;
+    if(pw.length<6)return er.textContent="Password कम से कम 6 अक्षर का रखें।";
+    const cred=await adminAuth.createUserWithEmailAndPassword(em,pw);
+    await db.collection("users").doc(cred.user.uid).set({
+     name,email:em,role,field:field||null,teamId:null,status:"active",
+     createdAt:FV.serverTimestamp(),createdBy:S.user.uid
+    });
+    await adminAuth.signOut();
+    toast("User बनाया गया");
+   }else{
+    await db.collection("users").doc(d.id).update({name,role,field:field||null});
+    toast("User update हुआ");
+   }
+   S.ed=null;home();
+  }catch(e){er.textContent=firebaseError(e)}
+ };
+}
+
+/* =========================
+   FIELDS
+========================= */
+function fieldsView(){
+ if(S.profile.role!=="super")return home();
+ shell("Field Management",`
+ <button class="btn" id="add">+ नया Field</button><div style="height:10px"></div>
+ ${S.fields.map(f=>`
+ <div class="card"><div class="row"><b class="grow">${esc(f.name)}</b>
+ <span class="tag">${S.users.filter(u=>u.field===f.name&&u.status!=="deleted").length} users</span></div>
+ <div class="mut">${S.surveys.filter(s=>s.field===f.name).length} surveys</div>
+ <div class="row" style="margin-top:9px"><button class="btn sm alt" data-e="${f.id}">Edit</button></div>
+ </div>`).join("")||'<div class="card empty">अभी Field नहीं है।</div>'}
+ `);
+ $("#add").onclick=()=>{S.ed={new:true,name:""};S.view="fieldEdit";render()};
+ app.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{
+  S.ed={...S.fields.find(f=>f.id===b.dataset.e),new:false};S.view="fieldEdit";render();
+ });
+}
+
+function fieldEditView(){
+ const d=S.ed;
+ shell(d.new?"New Field":"Edit Field",`
+ <label>Field Name<input id="nm" value="${esc(d.name)}"></label>
+ <div class="err" id="er"></div><button class="btn" id="sv">Save Field</button>
+ `,()=>{S.ed=null;home()});
+ $("#sv").onclick=async()=>{
+  const n=$("#nm").value.trim(),er=$("#er");
+  if(n.length<2)return er.textContent="Field name लिखें।";
+  try{
+   if(d.new)await db.collection("fields").add({name:n,status:"active",createdAt:FV.serverTimestamp()});
+   else await db.collection("fields").doc(d.id).update({name:n});
+   S.ed=null;home();toast("Field saved");
+  }catch(e){er.textContent=firebaseError(e)}
+ };
+}
+
+/* =========================
+   TEAM
+========================= */
+function teamView(){
+ if(S.profile.role!=="admin")return home();
+ const members=S.users.filter(u=>u.role==="surveyor"&&u.field===S.profile.field&&u.status!=="deleted");
+ const teams=[...new Set(members.map(u=>u.teamId).filter(Boolean))];
+
+ shell("Team Management",`
+ <button class="btn" id="new">+ नई Team</button><div style="height:10px"></div>
+ ${teams.map(t=>`
+ <div class="card"><b>${esc(t)}</b><div class="mut">${members.filter(u=>u.teamId===t).length} Surveyors</div>
+ <div class="row wrap" style="margin-top:9px">${members.filter(u=>u.teamId===t).map(u=>`<span class="tag">${esc(u.name)}</span>`).join("")}</div>
+ </div>`).join("")||'<div class="card empty">अभी Team नहीं बनी।</div>'}
+ <h3>Unassigned Surveyors</h3>
+ ${members.filter(u=>!u.teamId).map(u=>`
+ <div class="card"><div class="row"><span class="grow">${esc(u.name)}<br><span class="mut">${esc(u.email)}</span></span>
+ <button class="btn sm alt" data-a="${u.id}">Assign</button></div></div>`).join("")||'<div class="card empty">कोई unassigned Surveyor नहीं।</div>'}
+ `);
+
+ $("#new").onclick=()=>{S.ed={new:true,team:""};S.view="teamEdit";render()};
+ app.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>{
+  S.ed={new:false,userId:b.dataset.a};S.view="teamEdit";render();
+ });
+}
+
+function teamEditView(){
+ const d=S.ed;
+ if(d.new)return shell("New Team",`
+ <label>Team Name<input id="tn" placeholder="जैसे Bilgaon Population Team"></label>
+ <div class="err" id="er"></div><button class="btn" id="sv">Create Team</button>
+ `,()=>{S.ed=null;home()});
+
+ const members=S.users.filter(u=>u.role==="surveyor"&&u.field===S.profile.field&&u.status!=="deleted");
+ shell("Assign Team",`
+ <div class="card"><b>${esc(members.find(u=>u.id===d.userId)?.name||"Surveyor")}</b></div>
+ <label>Team Name<input id="tn" placeholder="Team name"></label>
+ <div class="err" id="er"></div><button class="btn" id="sv">Assign</button>
+ `,()=>{S.ed=null;home()});
+
+ $("#sv").onclick=async()=>{
+  const t=$("#tn").value.trim(),er=$("#er");
+  if(t.length<2)return er.textContent="Team name लिखें।";
+  if(d.new){toast("Team का नाम तैयार है। Survey बनाते समय यही नाम चुनें।");S.ed=null;home();return}
+  await db.collection("users").doc(d.userId).update({teamId:t});
+  S.ed=null;home();toast("Team assigned");
+ };
+}
+
+/* =========================
+   SURVEY LIST
+========================= */
+function surveysView(){
+ const role=S.profile.role;
+ let list=S.surveys.slice();
+ if(role==="surveyor")list=list.filter(s=>s.status==="pub" && (!s.teamId || s.teamId===S.profile.teamId));
+
+ list.sort((a,b)=>String(a.title||"").localeCompare(String(b.title||""),"hi"));
+
+ shell("Surveys",`
+ ${role==="admin"?'<button class="btn" id="nw">+ नया Survey</button><div style="height:10px"></div>':""}
+ ${list.map(s=>`
+ <div class="card">
+  <div class="row"><b class="grow">${esc(s.title||"Untitled Survey")}</b>
+  <span class="tag ${s.status==="pub"?"ok":"warn"}">${s.status==="pub"?"Published":"Draft"}</span></div>
+  <div class="mut">${esc(s.description||"")}<br>Field: ${esc(s.field||"-")} · Team: ${esc(s.teamId||"All")}</div>
+  <div class="row wrap" style="margin-top:9px">
+   ${role==="surveyor"?`<button class="btn sm" data-start="${s.id}">Survey भरें</button>`:""}
+   ${role==="admin"?`<button class="btn sm alt" data-edit="${s.id}">Edit</button>
+   <button class="btn sm ${s.status==="pub"?"warn":""}" data-pub="${s.id}">${s.status==="pub"?"Unpublish":"Publish"}</button>
+   <button class="btn sm alt" data-res="${s.id}">Responses</button>`:""}
+   ${role==="super"?`<button class="btn sm alt" data-res="${s.id}">Responses</button>`:""}
+  </div>
+ </div>`).join("")||'<div class="card empty">कोई survey नहीं मिला।</div>'}
+ `);
+
+ if($("#nw"))$("#nw").onclick=newSurvey;
+
+ app.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{
+  const s=S.surveys.find(x=>x.id===b.dataset.edit);S.ed={...s};S.view="surveyEdit";render();
+ });
+ app.querySelectorAll("[data-pub]").forEach(b=>b.onclick=async()=>{
+  const s=S.surveys.find(x=>x.id===b.dataset.pub);if(!s)return;
+  await db.collection("surveys").doc(s.id).update({status:s.status==="pub"?"draft":"pub",updatedAt:FV.serverTimestamp()});
+  toast(s.status==="pub"?"Unpublished":"Published");
+ });
+ app.querySelectorAll("[data-start]").forEach(b=>b.onclick=()=>{
+  const s=S.surveys.find(x=>x.id===b.dataset.start);S.ed={survey:s};S.view="collect";render();
+ });
+ app.querySelectorAll("[data-res]").forEach(b=>{b.onclick=()=>{S.ed={surveyId:b.dataset.res};S.view="responses";render()}});
+}
+
+/* =========================
+   SURVEY BUILDER
+========================= */
+function newSurvey(){
+ if(S.profile.role!=="admin")return;
+ S.ed={
+  new:true,field:S.profile.field,title:"",description:"",status:"draft",teamId:"",
+  duplicate:{on:true,action:"warning",fields:["wardNo","houseNo","name","age","father"]},
+  qs:[
+   {id:uid(),key:"wardNo",label:"वार्ड नंबर",type:"number",required:true,system:true},
+   {id:uid(),key:"houseNo",label:"मकान नंबर",type:"number",required:true,system:true},
+   {id:uid(),key:"name",label:"मुखिया / व्यक्ति का नाम",type:"text",required:true,system:true},
+   {id:uid(),key:"age",label:"उम्र",type:"number",required:true,system:true},
+   {id:uid(),key:"father",label:"पिता / पति का नाम",type:"text",required:false,system:true},
+   {id:uid(),key:"address",label:"पूरा पता",type:"textarea",required:true,system:true},
+   {id:uid(),key:"familyMembers",label:"परिवार के सदस्यों की संख्या",type:"number",required:true,system:true}
+  ]
+ };
+ S.view="surveyEdit";render();
+}
+
+function surveyEditView(){
+ const d=S.ed;
+ const qs=d.qs||[];
+
+ shell(d.new?"नया Survey":"Survey Edit",`
+ <label>Survey Name<input id="title" value="${esc(d.title)}" placeholder="जैसे जनसंख्या सर्वे 2026"></label>
+ <label>Description<textarea id="desc" rows="2">${esc(d.description)}</textarea></label>
+ <label>Team<select id="team"><option value="">सभी assigned Surveyors</option>
+ ${[...new Set(S.users.filter(u=>u.role==="surveyor"&&u.field===S.profile.field&&u.teamId).map(u=>u.teamId))].map(t=>`<option value="${esc(t)}" ${d.teamId===t?"selected":""}>${esc(t)}</option>`).join("")}
+ </select></label>
+
+ <div class="card">
+  <h3>Duplicate Check</h3>
+  <label><input id="dup" type="checkbox" ${d.duplicate?.on!==false?"checked":""} style="width:auto"> Duplicate warning चालू रखें</label>
+  <p class="mut">Ward + मकान नंबर + नाम + उम्र + पिता/पति नाम के match पर Surveyor को warning मिलेगी।</p>
+ </div>
+
+ <h3>Questions</h3>
+ <div id="qbox">${qs.map((q,i)=>questionEditor(q,i)).join("")}</div>
+ <button class="btn alt" id="addq">+ Question जोड़ें</button>
+ <div class="err" id="er"></div>
+ <button class="btn" id="save">Save Survey</button>
+ `,()=>{S.ed=null;home()});
+
+ $("#addq").onclick=()=>{
+  d.qs.push({id:uid(),key:"q"+Date.now(),label:"",type:"text",options:"",required:false});
+  render();
+ };
+
+ app.querySelectorAll("[data-qdel]").forEach(b=>b.onclick=()=>{
+  d.qs.splice(Number(b.dataset.qdel),1);render();
+ });
+
+ app.querySelectorAll("[data-qmove]").forEach(b=>b.onclick=()=>{
+  const i=Number(b.dataset.qmove),dir=b.dataset.dir,j=dir==="up"?i-1:i+1;
+  if(j<0||j>=d.qs.length)return;
+  [d.qs[i],d.qs[j]]=[d.qs[j],d.qs[i]];render();
+ });
+
+ app.querySelectorAll("[data-qinput]").forEach(el=>el.oninput=()=>{
+  const [i,k]=el.dataset.qinput.split("|");d.qs[Number(i)][k]=el.value;
+ });
+ app.querySelectorAll("[data-qtype]").forEach(el=>el.onchange=()=>{
+  const i=Number(el.dataset.qtype);d.qs[i].type=el.value;render();
+ });
+ app.querySelectorAll("[data-qreq]").forEach(el=>el.onchange=()=>{
+  d.qs[Number(el.dataset.qreq)].required=el.checked;
+ });
+
+ $("#save").onclick=async()=>{
+  const title=$("#title").value.trim(),desc=$("#desc").value.trim(),team=$("#team").value,er=$("#er");
+  if(!title)return er.textContent="Survey Name जरूरी है।";
+  for(const q of d.qs)if(!q.label.trim())return er.textContent="हर question का नाम लिखें।";
+  try{
+   const data={
+    field:S.profile.field,title,description:desc,teamId:team||null,
+    status:d.status||"draft",qs:d.qs,
+    duplicate:{on:$("#dup").checked,action:"warning",fields:["wardNo","houseNo","name","age","father"]},
+    updatedAt:FV.serverTimestamp()
+   };
+   if(d.new){
+    data.createdBy=S.user.uid;data.createdAt=FV.serverTimestamp();
+    await db.collection("surveys").add(data);
+   }else await db.collection("surveys").doc(d.id).update(data);
+   toast("Survey saved");S.ed=null;home();
+  }catch(e){er.textContent=firebaseError(e)}
+ };
+}
+
+function questionEditor(q,i){
+ const types=["text","textarea","number","choice","multi","rating"];
+ return `<div class="question">
+ <div class="row"><b class="grow">Question ${i+1}</b>
+ ${q.system?'<span class="tag">System</span>':""}
+ <button class="btn sm alt" data-qmove="${i}" data-dir="up">↑</button>
+ <button class="btn sm alt" data-qmove="${i}" data-dir="down">↓</button>
+ ${q.system?"":`<button class="btn sm danger" data-qdel="${i}">×</button>`}</div>
+ <input data-qinput="${i}|label" value="${esc(q.label)}" placeholder="Question">
+ <label>Type<select data-qtype="${i}">${types.map(t=>`<option value="${t}" ${q.type===t?"selected":""}>${t}</option>`).join("")}</select></label>
+ ${(q.type==="choice"||q.type==="multi")?`<input data-qinput="${i}|options" value="${esc(q.options||"")}" placeholder="Options comma से अलग करें, जैसे पुरुष,महिला,अन्य">`:""}
+ <label><input type="checkbox" data-qreq="${i}" ${q.required?"checked":""} style="width:auto"> Required</label>
+ </div>`;
+}
+
+/* =========================
+   COLLECT RESPONSE
+========================= */
+function collectView(){
+ const s=S.ed.survey;
+ const qs=s.qs||[];
+ shell(s.title,`
+ <div class="notice"><b>Surveyor:</b> ${esc(S.profile.name)}<br><b>Team:</b> ${esc(S.profile.teamId||"All")}</div>
+ <div class="card">
+ <h3>Respondent / House Information</h3>
+ <div id="formbox">${qs.map(q=>renderQuestion(q)).join("")}</div>
+ </div>
+ <div class="card">
+ <h3>परिवार के सदस्य</h3>
+ <p class="mut">पहले घर की जानकारी save करें, फिर इसी घर में परिवार के सदस्य जोड़ सकते हैं।</p>
+ <div id="members"></div>
+ <button class="btn alt" id="addmember">+ परिवार सदस्य जोड़ें</button>
+ </div>
+ <div class="err" id="er"></div>
+ <button class="btn" id="saveResp">Survey Save करें</button>
+ `,()=>{S.ed=null;home()});
+
+ $("#addmember").onclick=()=>{
+  const box=$("#members");
+  const n=box.children.length+1;
+  const div=document.createElement("div");
+  div.className="question";
+  div.innerHTML=`<b>सदस्य ${n}</b>
+  <input class="mname" placeholder="नाम">
+  <input class="mage" type="number" placeholder="उम्र">
+  <input class="mrel" placeholder="रिश्ता">
+  <select class="mgender"><option value="">लिंग</option><option>पुरुष</option><option>महिला</option><option>अन्य</option></select>`;
+  box.appendChild(div);
+ };
+
+ $("#saveResp").onclick=async()=>{
+  const er=$("#er"),answers={};
+  let bad=false;
+  qs.forEach(q=>{
+   const el=$(`[data-answer="${q.id}"]`);
+   let val;
+   if(q.type==="multi")val=[...app.querySelectorAll(`[data-answer="${q.id}"]:checked`)].map(x=>x.value);
+   else if(el)val=el.value;
+   if(q.required && (!val || (Array.isArray(val)&&!val.length)))bad=true;
+   answers[q.key||q.id]=val;
+  });
+  if(bad)return er.textContent="सभी Required जानकारी भरें।";
+
+  const duplicateFields=["wardNo","houseNo","name","age","father"];
+  const current={
+   wardNo:answers.wardNo||"",houseNo:answers.houseNo||"",name:String(answers.name||"").trim().toLowerCase(),
+   age:answers.age||"",father:String(answers.father||"").trim().toLowerCase()
+  };
+
+  if(s.duplicate?.on!==false){
+   const existing=S.responses.filter(r=>r.surveyId===s.id);
+   const dup=existing.find(r=>{
+    const a=r.answers||{};
+    return String(a.wardNo||"")===String(current.wardNo) &&
+           String(a.houseNo||"")===String(current.houseNo) &&
+           String(a.name||"").trim().toLowerCase()===current.name &&
+           String(a.age||"")===String(current.age) &&
+           String(a.father||"").trim().toLowerCase()===current.father;
+   });
+   if(dup){
+    const ok=confirm("⚠️ यह घर/व्यक्ति पहले से survey में दर्ज दिखाई दे रहा है। फिर भी save करना है?");
+    if(!ok)return;
+   }
+  }
+
+  const members=[...app.querySelectorAll("#members .question")].map(x=>({
+   name:x.querySelector(".mname")?.value.trim()||"",
+   age:x.querySelector(".mage")?.value||"",
+   relation:x.querySelector(".mrel")?.value.trim()||"",
+   gender:x.querySelector(".mgender")?.value||""
+  })).filter(x=>x.name);
+
+  try{
+   await db.collection("responses").add({
+    surveyId:s.id,surveyTitle:s.title,field:s.field,teamId:s.teamId||null,
+    by:S.user.uid,byName:S.profile.name||"",createdAt:FV.serverTimestamp(),
+    createdISO:now(),answers,members,
+    houseKey:`${current.wardNo}|${current.houseNo}`
+   });
+   toast("Survey save हो गया");
+   S.ed=null;home();
+  }catch(e){er.textContent=firebaseError(e)}
+ };
+}
+
+function renderQuestion(q){
+ const key=q.id;
+ let body="";
+ if(q.type==="textarea")body=`<textarea data-answer="${key}" rows="3"></textarea>`;
+ else if(q.type==="choice")body=`<select data-answer="${key}"><option value="">Select करें</option>${opts(q).map(o=>`<option>${esc(o)}</option>`).join("")}</select>`;
+ else if(q.type==="multi")body=opts(q).map(o=>`<label class="row" style="margin:7px 0"><input type="checkbox" data-answer="${key}" value="${esc(o)}" style="width:auto;margin:0"> ${esc(o)}</label>`).join("");
+ else if(q.type==="rating")body=`<select data-answer="${key}"><option value="">Rating</option>${[1,2,3,4,5].map(n=>`<option>${n}</option>`).join("")}</select>`;
+ else body=`<input data-answer="${key}" type="${q.type==="number"?"number":"text"}">`;
+ return `<div class="question"><label><b>${esc(q.label)}</b>${q.required?' <span style="color:var(--err)">*</span>':""}</label>${body}</div>`;
+}
+
+/* =========================
+   RESPONSES + REPORT
+========================= */
+function responsesView(){
+ const sid=S.ed?.surveyId||null;
+ let rows=S.responses.slice();
+
+ if(S.profile.role==="admin")rows=rows.filter(r=>r.field===S.profile.field);
+ if(sid)rows=rows.filter(r=>r.surveyId===sid);
+
+ rows.sort((a,b)=>{
+  const aa=a.answers||{},bb=b.answers||{};
+  const w=Number(aa.wardNo||999999)-Number(bb.wardNo||999999);
+  if(w)return w;
+  return Number(aa.houseNo||999999)-Number(bb.houseNo||999999);
+ });
+
+ shell("Responses",`
+ <div class="card no-print">
+  <div class="row"><b class="grow">${rows.length} Responses</b>
+  <button class="btn sm" id="print">🖨 Print</button></div>
+  <button class="btn alt" id="report">Excel-style Report</button>
+ </div>
+ <div class="tablewrap print-area">
+ <table class="tbl"><thead><tr><th>Ward</th><th>मकान</th><th>नाम</th><th>उम्र</th><th>पिता/पति</th><th>सदस्य</th><th>Surveyor</th></tr></thead>
+ <tbody>${rows.map(r=>{
+  const a=r.answers||{};
+  return `<tr><td>${esc(a.wardNo)}</td><td>${esc(a.houseNo)}</td><td>${esc(a.name)}</td><td>${esc(a.age)}</td><td>${esc(a.father)}</td><td>${r.members?.length||0}</td><td>${esc(r.byName)}</td></tr>`;
+ }).join("")||'<tr><td colspan="7">कोई response नहीं।</td></tr>'}</tbody></table></div>
+ `,()=>{S.ed=null;home()});
+
+ $("#print").onclick=()=>window.print();
+ $("#report").onclick=()=>{S.ed={rows};S.view="report";render()};
+}
+
+function reportView(){
+ const rows=S.ed.rows||[];
+ const allKeys=[];
+ rows.forEach(r=>Object.keys(r.answers||{}).forEach(k=>{if(!allKeys.includes(k))allKeys.push(k)}));
+ const labels={
+  wardNo:"Ward",houseNo:"मकान नंबर",name:"नाम",age:"उम्र",father:"पिता/पति",address:"पता",familyMembers:"परिवार सदस्य"
+ };
+ shell("Excel-style Report",`
+ <div class="card no-print">
+  <button class="btn" id="print">🖨 Print / Save PDF</button>
+  <button class="btn alt" id="csv">⬇ CSV Download</button>
+ </div>
+ <div class="tablewrap print-area"><table class="tbl"><thead><tr>
+ ${allKeys.map(k=>`<th>${esc(labels[k]||k)}</th>`).join("")}<th>Surveyor</th><th>Members</th></tr></thead>
+ <tbody>${rows.map(r=>`<tr>${allKeys.map(k=>`<td>${esc(Array.isArray(r.answers?.[k])?r.answers[k].join(", "):(r.answers?.[k]??""))}</td>`).join("")}<td>${esc(r.byName)}</td><td>${r.members?.length||0}</td></tr>`).join("")}</tbody>
+ </table></div>
+ `,()=>{S.view="responses";render()});
+
+ $("#print").onclick=()=>window.print();
+
+ $("#csv").onclick=()=>{
+  const head=[...allKeys.map(k=>labels[k]||k),"Surveyor","Members"];
+  const data=rows.map(r=>[
+   ...allKeys.map(k=>Array.isArray(r.answers?.[k])?r.answers[k].join(" / "):(r.answers?.[k]??"")),
+   r.byName||"",r.members?.length||0
+  ]);
+  const csv=[head,...data].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="survixaa-report.csv";a.click();
+ };
+}
+
+/* =========================
+   PROFILE
+========================= */
+function profileView(){
+ shell("Profile",`
+ <div class="card">
+  <h3>${esc(S.profile.name||"")}</h3>
+  <div class="mut">${esc(S.profile.email||S.user.email||"")}<br>${esc(roleLabel(S.profile.role))}<br>Field: ${esc(S.profile.field||"Not assigned")}<br>Team: ${esc(S.profile.teamId||"Not assigned")}</div>
+ </div>
+ <div class="card">
+  <h3>Password</h3>
+  <p class="mut">आप अपना password बदलने/reset करने के लिए email reset link ले सकते हैं।</p>
+  <button class="btn" id="reset">मेरे Password का Reset Link भेजें</button>
+  <button class="btn danger" id="logout">Logout</button>
+ </div>
+ `);
+ $("#reset").onclick=async()=>{
+  try{await auth.sendPasswordResetEmail(S.user.email);toast("Reset link email पर भेज दिया गया")}
+  catch(e){toast(firebaseError(e))}
+ };
+ $("#logout").onclick=()=>auth.signOut();
+}
+</script>
+</body>
+</html>
